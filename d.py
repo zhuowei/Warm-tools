@@ -1,5 +1,9 @@
 from gdb import *
 from gdb.unwinder import *
+from gdb.FrameDecorator import FrameDecorator
+import sys
+sys.path.append("/home/zhuowei/warm")
+import funcnames
 class FindBaseCommand(Command):
 	def __init__(self):
 		Command.__init__(self, "findbase", COMMAND_DATA)
@@ -38,10 +42,34 @@ class WindowsARMUnwinder(Unwinder):
 		unwind_info.add_saved_register(15, Value(prevframe[1]).cast(mytype))
 		return unwind_info
 
+class WindowsARMFrameDecorator(FrameDecorator):
+	def __init__(self, fobj):
+		super(WindowsARMFrameDecorator, self).__init__(fobj)
+	def function(self):
+		if findbase.slide == 0:
+			raise Exception("Hey you need to run findbase")
+		pc = int(self.inferior_frame().pc())
+		fun = funcnames.lookupaddr(pc - findbase.slide)
+		if fun != None:
+			return str(fun)
+		return super(WindowsARMFrameDecorator, self).function()
+
+class WindowsARMFrameFilter:
+	def __init__(self):
+		self.name = "WindowsARMFrameFilter"
+		self.priority = 100
+		self.enabled = True
+	def filter(self, frame_iter):
+		frame_iter = map(WindowsARMFrameDecorator, frame_iter)
+		return frame_iter
+
 findbase = FindBaseCommand()
 
 unwinder = WindowsARMUnwinder()
 
 register_unwinder(None, unwinder, True)
+
+frame_filter = WindowsARMFrameFilter()
+frame_filters[frame_filter.name] = frame_filter
 
 print("Python script for debugging Windows on ARM in QEMU: loaded")
